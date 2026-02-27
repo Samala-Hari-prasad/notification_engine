@@ -80,9 +80,59 @@ def exceeds_rate_limits(user_id, event, max_per_10min=3, daily_cap=30):
 # -------------------------------------------------------------------
 # Dynamic rule evaluation stub (reads RuleConfig model)
 # -------------------------------------------------------------------
+from rules.models import RuleConfig
+import datetime as dt
+
 def evaluate_rules(event):
     """Placeholder for rule engine.
     Returns a tuple (action, description) where action is one of
     'NOW', 'LATER', 'NEVER' or None if no rule matches.
     """
+    now = datetime.utcnow()
+    action, description = None, None
+
+    # 1️⃣ Rule: System Alerts Bypass
+    if event.event_type == 'system_alert' and event.priority_hint == 'high':
+        # Check if the routing rule exists and allows bypass
+        rule_qs = RuleConfig.objects.filter(key='system_alert_routing').first()
+        if rule_qs and rule_qs.value.get('always_now'):
+            return "NOW", "Critical system alert forced immediate delivery (Rule Bypass)"
+
+    # 2️⃣ Rule: Quiet Hours (e.g., Suppress promotions during night)
+    rule_qh = RuleConfig.objects.filter(key='quiet_hours').first()
+    if rule_qh:
+        start_str = rule_qh.value.get('start', '22:00')
+        end_str = rule_qh.value.get('end', '08:00')
+        start_time = dt.datetime.strptime(start_str, '%H:%M').time()
+        end_time = dt.datetime.strptime(end_str, '%H:%M').time()
+        
+        current_time = now.time()
+        in_quiet_time = False
+        
+        if start_time <= end_time:
+            in_quiet_time = start_time <= current_time <= end_time
+        else:
+            in_quiet_time = current_time >= start_time or current_time <= end_time
+            
+        if in_quiet_time and event.priority_hint != 'high':
+            # Send to deferred queue instead of NEVER
+            return "LATER", f"Currently in quiet hours ({start_str} - {end_str}). Scheduled for Later."
+
+    # 3️⃣ Rule: Daily Cap specifically for Marketing
+    if event.event_type == 'promotional':
+        rule_mx = RuleConfig.objects.filter(key='max_daily_marketing').first()
+        if rule_mx:
+            limit = rule_mx.value.get('limit', 2)
+            today = now.strftime('%Y-%m-%d')
+            marketing_key = f"market_cap:{event.user_id}:{today}"
+            
+            try:
+                count = cache.incr(marketing_key)
+            except ValueError:
+                cache.set(marketing_key, 1, timeout=86400)
+                count = 1
+                
+            if count > limit:
+                return "NEVER", f"Max daily marketing limit of {limit} reached."
+
     return None, None
