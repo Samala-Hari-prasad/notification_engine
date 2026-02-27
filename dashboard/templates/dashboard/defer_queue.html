@@ -1,0 +1,12 @@
+{% extends "dashboard/base.html" %}
+{% block content %}
+<h2>Deferred Queue</h2>
+<table>
+    <tr><th>Event ID</th><th>Scheduled For</th><th>Status</th><th>Retries</th></tr>
+    {% for item in pending %}
+    <tr><td>{{ item.event.id }}</td><td>{{ item.scheduled_for }}</td><td>{{ item.status }}</td><td>{{ item.retry_count }}</td></tr>
+    {% empty %}
+    <tr><td colspan="4">No pending deferred notifications.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

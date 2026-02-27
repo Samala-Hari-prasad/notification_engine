@@ -1,0 +1,12 @@
+{% extends "dashboard/base.html" %}
+{% block content %}
+<h2>Audit Log</h2>
+<table>
+    <tr><th>Event ID</th><th>User</th><th>Classification</th><th>Explanation</th><th>Time</th></tr>
+    {% for rec in decisions %}
+    <tr><td>{{ rec.event.id }}</td><td>{{ rec.event.user_id }}</td><td>{{ rec.classification }}</td><td>{{ rec.explanation }}</td><td>{{ rec.timestamp }}</td></tr>
+    {% empty %}
+    <tr><td colspan="5">No records yet.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

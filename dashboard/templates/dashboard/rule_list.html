@@ -1,0 +1,12 @@
+{% extends "dashboard/base.html" %}
+{% block content %}
+<h2>Rule Configuration</h2>
+<table>
+    <tr><th>Key</th><th>Value</th><th>Description</th></tr>
+    {% for rule in rules %}
+    <tr><td>{{ rule.key }}</td><td><pre>{{ rule.value }}</pre></td><td>{{ rule.description }}</td></tr>
+    {% empty %}
+    <tr><td colspan="3">No rules defined.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}
