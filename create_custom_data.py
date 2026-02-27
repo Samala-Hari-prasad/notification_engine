@@ -67,6 +67,41 @@ def create_dataset_user_activity(base_date):
             metadata={'post_id': i, 'interaction_type': 'like'},
         )
 
+def create_dataset_daily_digests(base_date):
+    """Creates a dataset for daily email digests."""
+    print("📰 Generating Daily Digests Dataset...")
+    for i in range(15):
+        # Scheduled roughly around 8 AM
+        ts = base_date - timedelta(days=random.randint(0, 5))
+        ts = ts.replace(hour=8, minute=random.randint(0, 30))
+        NotificationEvent.objects.create(
+            user_id=f'user{random.randint(1, 10)}',
+            event_type='digest',
+            title=f'Your Daily Activity Summary {i}',
+            source='summary_job',
+            priority_hint='low',
+            timestamp=ts,
+            channel='email',
+            metadata={'items_included': random.randint(5, 20)},
+        )
+
+def create_dataset_urgent_reminders(base_date):
+    """Creates a dataset for high-priority upcoming events (e.g., payment due)."""
+    print("⏰ Generating Urgent Reminders Dataset...")
+    for i in range(10):
+        # Scheduled randomly in the last 2 days
+        ts = base_date - timedelta(hours=random.randint(1, 48))
+        NotificationEvent.objects.create(
+            user_id=f'user{random.randint(1, 10)}',
+            event_type='reminder',
+            title=f'Action Required: Subscription Renewal {i}',
+            source='billing_system',
+            priority_hint='high',
+            timestamp=ts,
+            channel='push',
+            metadata={'amount_due': 19.99, 'deadline': (ts + timedelta(days=2)).isoformat()},
+        )
+
 def create_rules():
     """Create example RuleConfig entries with distinct requirements."""
     RuleConfig.objects.update_or_create(
@@ -99,6 +134,8 @@ if __name__ == '__main__':
     create_dataset_marketing(now)
     create_dataset_system_alerts(now)
     create_dataset_user_activity(now)
+    create_dataset_daily_digests(now)
+    create_dataset_urgent_reminders(now)
     create_rules()
     
     total = NotificationEvent.objects.count()
