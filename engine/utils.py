@@ -25,12 +25,10 @@ def fingerprint_event(event):
     return hashlib.sha256(json_str.encode('utf-8')).hexdigest()
 
 # -------------------------------------------------------------------
-# Exact duplicate detection (Redis cache with TTL)
+# Exact duplicate detection
 # -------------------------------------------------------------------
 def is_exact_duplicate(fingerprint, window_seconds=600):
-    """Return True if the fingerprint exists in Redis within the window.
-    The fingerprint is stored with a TTL equal to the window.
-    """
+    """Return True if the fingerprint exists in cache within the window."""
     key = f"dup:{fingerprint}"
     if cache.get(key):
         return True
@@ -39,58 +37,44 @@ def is_exact_duplicate(fingerprint, window_seconds=600):
     return False
 
 # -------------------------------------------------------------------
-# Near‑duplicate detection (simple cosine similarity on title tokens)
+# Near‑duplicate detection (Bypassed for simple caching backends)
 # -------------------------------------------------------------------
-def _token_set(text):
-    return set(text.lower().split())
-
 def is_near_duplicate(event, similarity_threshold=0.85, recent_seconds=300):
-    """Very lightweight near‑duplicate detection.
-    Looks at recent fingerprints stored in a Redis sorted set keyed by user.
+    """Near-duplicate detection logic built for Redis has been turned off
+    temporarily to support SQLite and LocMem cache environments.
     """
-    recent_key = f"recent:{event.user_id}"
-    now_ts = datetime.utcnow().timestamp()
-    # Remove old entries
-    cache.zremrangebyscore(recent_key, 0, now_ts - recent_seconds)
-    # Compare with remaining titles
-    existing = cache.zrange(recent_key, 0, -1, withscores=False)
-    event_tokens = _token_set(event.title)
-    for stored_fp in existing:
-        # Retrieve the original title from a secondary hash (optional – simplified)
-        # For this demo we just compare token overlap of the fingerprint’s source title
-        # In a real system you would store the title alongside the fingerprint.
-        # Here we assume the fingerprint encodes the title, so we cannot compute similarity.
-        # Therefore we skip actual similarity and just return False.
-        pass
-    # Store current fingerprint for future near‑duplicate checks
-    cache.zadd(recent_key, {fingerprint_event(event): now_ts})
-    cache.expire(recent_key, recent_seconds)
     return False
 
 # -------------------------------------------------------------------
-# Rate‑limit / fatigue counters (Redis counters per user)
+# Rate‑limit / fatigue counters
 # -------------------------------------------------------------------
 def exceeds_rate_limits(user_id, event, max_per_10min=3, daily_cap=30):
-    """Check if the user has exceeded notification caps.
-    Uses Redis INCR with expiry to implement sliding windows.
+    """Check if the user has exceeded notification caps using simple cache framework.
     """
-    # 10‑minute window counter
     key_10min = f"rate10:{user_id}"
-    count_10 = cache.incr(key_10min)
-    if count_10 == 1:
-        cache.expire(key_10min, 600)  # 10 minutes
+    
+    try:
+        count_10 = cache.incr(key_10min)
+    except ValueError:
+        # Cache incr throws ValueError if key doesn't exist in LocMemCache
+        cache.set(key_10min, 1, timeout=600)
+        count_10 = 1
+
     if count_10 > max_per_10min:
         return True
 
-    # Daily counter (reset at midnight UTC)
     today = datetime.utcnow().strftime('%Y-%m-%d')
     key_daily = f"rate_day:{user_id}:{today}"
-    count_day = cache.incr(key_daily)
-    if count_day == 1:
-        # expire in 24 h
-        cache.expire(key_daily, 86400)
+    
+    try:
+        count_day = cache.incr(key_daily)
+    except ValueError:
+        cache.set(key_daily, 1, timeout=86400)
+        count_day = 1
+
     if count_day > daily_cap:
         return True
+        
     return False
 
 # -------------------------------------------------------------------
@@ -101,6 +85,4 @@ def evaluate_rules(event):
     Returns a tuple (action, description) where action is one of
     'NOW', 'LATER', 'NEVER' or None if no rule matches.
     """
-    # In a full implementation we would query RuleConfig objects and
-    # apply them. For now we return None to let the core logic decide.
     return None, None
